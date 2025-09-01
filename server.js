@@ -19,18 +19,18 @@ function generateFakeGPS(start, end) {
   const lat = start.lat + (Math.random() * (end.lat - start.lat));
   const lng = start.lng + (Math.random() * (end.lng - start.lng));
   const speed = (Math.random() * 60).toFixed(2);
-  return { lat: lat, lng: lng, speed: parseFloat(speed) }; // Changed from latitude/longitude to lat/lng
+  return { lat: lat, lng: lng, speed: parseFloat(speed) }; 
 }
 
 async function sendBatch(deviceId, batch) {
   try {
-    // Add deviceId to each GPS point in the batch
+   
     const batchWithDeviceId = batch.map(point => ({
       ...point,
       deviceId: deviceId
     }));
     
-    // Send the batch directly as an array (not wrapped in an object)
+    
     const response = await axios.post(BACKEND_API, batchWithDeviceId);
     console.log(`✅ Uploaded for ${deviceId}:`, response.data);
   } catch (error) {
