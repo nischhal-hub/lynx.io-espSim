@@ -38,6 +38,10 @@ async function sendBatch(deviceId, batch) {
   }
 }
 
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
 // Start simulation
 app.post("/start", (req, res) => {
   const { devices } = req.body;
