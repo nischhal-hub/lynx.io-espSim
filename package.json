@@ -1,0 +1,12 @@
+{
+  "name": "lynx.io-espsim",
+  "version": "1.0.0",
+  "description": "ESP-32 gps tracker simulator",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "author": "nischal",
+  "license": "ISC"
+}
