@@ -2,55 +2,337 @@
 <html>
 <head>
   <title>ESP32 Location Simulator</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f5f5f5;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    h2 {
+      color: #333;
+      text-align: center;
+    }
+    
+    #map {
+      height: 400px;
+      margin: 20px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    
+    .device-row {
+      margin-bottom: 15px;
+      padding: 15px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      background-color: #fafafa;
+    }
+    
+    .device-row label {
+      display: inline-block;
+      width: 120px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    
+    .device-row input {
+      width: 300px;
+      padding: 8px;
+      margin: 5px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    
+    .device-row input[readonly] {
+      background-color: #f9f9f9;
+      cursor: pointer;
+    }
+    
+    .device-row input[readonly]:hover {
+      background-color: #e9e9e9;
+    }
+    
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .add-btn {
+      background-color: #4CAF50;
+      color: white;
+    }
+    
+    .start-btn {
+      background-color: #2196F3;
+      color: white;
+    }
+    
+    .stop-btn {
+      background-color: #f44336;
+      color: white;
+    }
+    
+    button:hover {
+      opacity: 0.8;
+    }
+    
+    .controls {
+      text-align: center;
+      margin: 20px 0;
+    }
+    
+    #output {
+      background-color: #f4f4f4;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      margin-top: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    
+    .remove-device {
+      background-color: #ff6b6b;
+      color: white;
+      padding: 5px 10px;
+      font-size: 12px;
+      float: right;
+    }
+    
+    .instructions {
+      background-color: #e3f2fd;
+      border-left: 4px solid #2196F3;
+      padding: 10px;
+      margin-bottom: 20px;
+    }
+  </style>
 </head>
 <body>
-  <h2>ESP32 Location Simulator</h2>
-  <form id="simForm">
-    <label>Device IDs (comma separated):</label><br/>
-    <input type="text" id="deviceIds" placeholder="e.g. dev1,dev2"><br/><br/>
+  <div class="container">
+    <h2>🌍 ESP32 Location Simulator</h2>
+    
+    <div class="instructions">
+      <strong>Instructions:</strong> Click "Add Device" to create a new device, then click on the map to set start and end locations for each device.
+    </div>
 
-    <label>Start Location:</label><br/>
-    <input type="number" step="0.0001" id="startLat" placeholder="Latitude">
-    <input type="number" step="0.0001" id="startLng" placeholder="Longitude"><br/><br/>
+    <div class="controls">
+      <button class="add-btn" onclick="addDevice()">➕ Add Device</button>
+      <button class="start-btn" onclick="startSim()">▶ Start All Simulations</button>
+      <button class="stop-btn" onclick="stopSim()">⏹ Stop All Simulations</button>
+    </div>
 
-    <label>End Location:</label><br/>
-    <input type="number" step="0.0001" id="endLat" placeholder="Latitude">
-    <input type="number" step="0.0001" id="endLng" placeholder="Longitude"><br/><br/>
+    <form id="devicesForm"></form>
 
-    <button type="button" onclick="startSim()">Start</button>
-    <button type="button" onclick="stopSim()">Stop</button>
-  </form>
+    <div id="map"></div>
+    <div id="output"></div>
+  </div>
 
-  <pre id="output"></pre>
-
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    async function startSim() {
-      const deviceIds = document.getElementById("deviceIds").value.split(",");
-      const startLat = parseFloat(document.getElementById("startLat").value);
-      const startLng = parseFloat(document.getElementById("startLng").value);
-      const endLat = parseFloat(document.getElementById("endLat").value);
-      const endLng = parseFloat(document.getElementById("endLng").value);
+    let deviceCount = 0;
+    let map, markers = {};
 
-      const res = await fetch("/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceIds,
-          startLocation: { lat: startLat, lng: startLng },
-          endLocation: { lat: endLat, lng: endLng },
-        }),
+    // Init Map
+    window.onload = function() {
+      map = L.map("map").setView([27.7172, 85.324], 13); // Kathmandu default
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap contributors"
+      }).addTo(map);
+
+      // Click map to assign location to selected input
+      map.on("click", function(e) {
+        if (!window.activeInput) {
+          alert("Please click on a location input field first, then click on the map.");
+          return;
+        }
+        
+        const { lat, lng } = e.latlng;
+        window.activeInput.value = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+        window.activeInput.style.backgroundColor = "#e8f5e8";
+
+        // Show marker with label
+        const markerId = window.activeInput.id;
+        if (markers[markerId]) {
+          map.removeLayer(markers[markerId]);
+        }
+        
+        const isStart = markerId.includes('start');
+        const markerColor = isStart ? 'green' : 'red';
+        const popupText = isStart ? 'Start Location' : 'End Location';
+        
+        markers[markerId] = L.marker([lat, lng])
+          .addTo(map)
+          .bindPopup(popupText)
+          .openPopup();
+        
+        // Clear active input
+        window.activeInput = null;
       });
-      document.getElementById("output").innerText = JSON.stringify(await res.json(), null, 2);
+    };
+
+    function addDevice() {
+      deviceCount++;
+      const container = document.getElementById("devicesForm");
+
+      const row = document.createElement("div");
+      row.className = "device-row";
+      row.id = `device-row-${deviceCount}`;
+      row.innerHTML = `
+        <button type="button" class="remove-device" onclick="removeDevice(${deviceCount})">✕ Remove</button>
+        
+        <label>Device ID:</label>
+        <input type="text" id="device-${deviceCount}" placeholder="Enter unique device ID" value="device-${deviceCount}"><br/>
+
+        <label>Start Location:</label>
+        <input type="text" id="start-${deviceCount}" placeholder="Click here, then click on map" readonly
+               onclick="setActiveInput(this)" style="cursor: pointer;"><br/>
+
+        <label>End Location:</label>
+        <input type="text" id="end-${deviceCount}" placeholder="Click here, then click on map" readonly
+               onclick="setActiveInput(this)" style="cursor: pointer;"><br/>
+      `;
+
+      container.appendChild(row);
+    }
+
+    function removeDevice(deviceNum) {
+      const row = document.getElementById(`device-row-${deviceNum}`);
+      if (row) {
+        row.remove();
+        
+        // Remove associated markers
+        if (markers[`start-${deviceNum}`]) {
+          map.removeLayer(markers[`start-${deviceNum}`]);
+          delete markers[`start-${deviceNum}`];
+        }
+        if (markers[`end-${deviceNum}`]) {
+          map.removeLayer(markers[`end-${deviceNum}`]);
+          delete markers[`end-${deviceNum}`];
+        }
+      }
+    }
+
+    function setActiveInput(input) {
+      // Reset all input backgrounds
+      document.querySelectorAll('input[readonly]').forEach(inp => {
+        inp.style.backgroundColor = "#f9f9f9";
+      });
+      
+      // Highlight selected input
+      input.style.backgroundColor = "#fff3cd";
+      window.activeInput = input;
+    }
+
+    async function startSim() {
+      const devices = [];
+      
+      // Get all existing device rows
+      const deviceRows = document.querySelectorAll('.device-row');
+      
+      deviceRows.forEach(row => {
+        const deviceInput = row.querySelector('[id^="device-"]');
+        const startInput = row.querySelector('[id^="start-"]');
+        const endInput = row.querySelector('[id^="end-"]');
+        
+        if (!deviceInput || !startInput || !endInput) return;
+        
+        const id = deviceInput.value.trim();
+        const startVal = startInput.value.trim();
+        const endVal = endInput.value.trim();
+
+        if (!id || !startVal || !endVal) return;
+
+        try {
+          const [sLat, sLng] = startVal.split(",").map(Number);
+          const [eLat, eLng] = endVal.split(",").map(Number);
+
+          if (isNaN(sLat) || isNaN(sLng) || isNaN(eLat) || isNaN(eLng)) {
+            throw new Error("Invalid coordinates");
+          }
+
+          devices.push({
+            id,
+            startLocation: { lat: sLat, lng: sLng },
+            endLocation: { lat: eLat, lng: eLng },
+          });
+        } catch (error) {
+          alert(`Invalid coordinates for device ${id}. Please check the format.`);
+          return;
+        }
+      });
+
+      if (devices.length === 0) {
+        alert("Please add at least one device with valid locations.");
+        return;
+      }
+
+      try {
+        document.getElementById("output").innerText = "Starting simulation...";
+        
+        const res = await fetch("/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ devices }),
+        });
+        
+        const result = await res.json();
+        document.getElementById("output").innerText = `✅ Started: ${JSON.stringify(result, null, 2)}`;
+      } catch (error) {
+        document.getElementById("output").innerText = `❌ Error: ${error.message}`;
+      }
     }
 
     async function stopSim() {
-      const deviceIds = document.getElementById("deviceIds").value.split(",");
-      const res = await fetch("/stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceIds }),
+      const ids = [];
+      
+      // Get all existing device rows
+      const deviceRows = document.querySelectorAll('.device-row');
+      
+      deviceRows.forEach(row => {
+        const deviceInput = row.querySelector('[id^="device-"]');
+        if (deviceInput && deviceInput.value.trim()) {
+          ids.push(deviceInput.value.trim());
+        }
       });
-      document.getElementById("output").innerText = JSON.stringify(await res.json(), null, 2);
+
+      if (ids.length === 0) {
+        alert("No devices to stop.");
+        return;
+      }
+
+      try {
+        document.getElementById("output").innerText = "Stopping simulation...";
+        
+        const res = await fetch("/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceIds: ids }),
+        });
+        
+        const result = await res.json();
+        document.getElementById("output").innerText = `⏹ Stopped: ${JSON.stringify(result, null, 2)}`;
+      } catch (error) {
+        document.getElementById("output").innerText = `❌ Error: ${error.message}`;
+      }
     }
   </script>
 </body>

@@ -1,26 +1,37 @@
+import dotenv from "dotenv";
 import express from "express";
 import axios from "axios";
+dotenv.config();
 
 const app = express();
-const PORT = 4000;
-const BACKEND_API = "http://192.168.1.80:3000/api/v1/location";
+const PORT = process.env.PORT || 4000;
+const BACKEND_API = process.env.BACKEND_URL;
+const HOST = process.env.HOST || "0.0.0.0";
+
+console.log("Using BACKEND_API:", BACKEND_API);
 
 app.use(express.json());
-app.use(express.static("public")); // serve UI files from /public
+app.use(express.static("public")); 
 
-// Store simulations in memory
 let simulations = {};
 
 function generateFakeGPS(start, end) {
   const lat = start.lat + (Math.random() * (end.lat - start.lat));
   const lng = start.lng + (Math.random() * (end.lng - start.lng));
   const speed = (Math.random() * 60).toFixed(2);
-  return { latitude: lat, longitude: lng, speed: parseFloat(speed) };
+  return { lat: lat, lng: lng, speed: parseFloat(speed) }; // Changed from latitude/longitude to lat/lng
 }
 
 async function sendBatch(deviceId, batch) {
   try {
-    const response = await axios.post(BACKEND_API, { deviceId, points: batch });
+    // Add deviceId to each GPS point in the batch
+    const batchWithDeviceId = batch.map(point => ({
+      ...point,
+      deviceId: deviceId
+    }));
+    
+    // Send the batch directly as an array (not wrapped in an object)
+    const response = await axios.post(BACKEND_API, batchWithDeviceId);
     console.log(`✅ Uploaded for ${deviceId}:`, response.data);
   } catch (error) {
     console.error(`❌ Upload failed [${deviceId}]:`, error.response?.data || error.message);
@@ -29,19 +40,17 @@ async function sendBatch(deviceId, batch) {
 
 // Start simulation
 app.post("/start", (req, res) => {
-  const { deviceIds, startLocation, endLocation } = req.body;
+  const { devices } = req.body;
 
-  deviceIds.forEach((id) => {
+  devices.forEach(({ id, startLocation, endLocation }) => {
     let buffer = [];
 
-    // generate GPS
     const gpsInterval = setInterval(() => {
       const gpsPoint = generateFakeGPS(startLocation, endLocation);
       buffer.push(gpsPoint);
       console.log(`Generated [${id}]`, gpsPoint);
     }, 5000);
 
-    // send batch
     const batchInterval = setInterval(() => {
       if (buffer.length > 0) {
         const batch = [...buffer];
@@ -52,8 +61,7 @@ app.post("/start", (req, res) => {
 
     simulations[id] = { gpsInterval, batchInterval };
   });
-
-  res.json({ message: "Simulation started", devices: deviceIds });
+  res.json({ message: "Simulation started", devices });
 });
 
 // Stop simulation
@@ -70,6 +78,6 @@ app.post("/stop", (req, res) => {
   res.json({ message: "Simulation stopped", devices: deviceIds });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Simulator UI running at http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`🚀 Simulator UI running at http://${HOST}:${PORT}`);
 });
