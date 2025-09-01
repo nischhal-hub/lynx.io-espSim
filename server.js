@@ -9,6 +9,7 @@ const BACKEND_API = process.env.BACKEND_URL;
 const HOST = process.env.HOST || "0.0.0.0";
 
 console.log("Using BACKEND_API:", BACKEND_API);
+console.log("Server running on:", `${HOST}:${PORT}`);
 
 app.use(express.json());
 app.use(express.static("public")); 
